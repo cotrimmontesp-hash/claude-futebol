@@ -348,7 +348,7 @@ export class Cena {
       const passoI = e.fase === 'gol' ? 1 : 4; const off = Math.floor(this.tempo * 10) % passoI;
       for (let i = off; i < this.torcidaBase.length; i += passoI) {
         this.torcida.getMatrixAt(i, m); m.decompose(p, q, sc);
-        const tb = this.torcidaBase[i]; p.y = tb.y + Math.max(0, Math.sin(this.tempo * 9 + tb.fase)) * 0.35 * festa;
+        const tb = this.torcidaBase[i]; if (!tb) continue; p.y = tb.y + Math.max(0, Math.sin(this.tempo * 9 + tb.fase)) * 0.35 * festa;
         m.compose(p, q, sc); this.torcida.setMatrixAt(i, m);
       }
       this.torcida.instanceMatrix.needsUpdate = true;
