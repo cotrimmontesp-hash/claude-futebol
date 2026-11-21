@@ -1,0 +1,45 @@
+name: Gerar APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+      - name: Instalar dependências
+        run: npm install
+      - name: Gerar projeto Android
+        run: npx expo prebuild -p android --no-install
+      - name: Compilar APK
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a,armeabi-v7a
+      - name: Renomear
+        run: cp android/app/build/outputs/apk/release/app-release.apk ClaudeFutebol.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ClaudeFutebol-apk
+          path: ClaudeFutebol.apk
+      - name: Publicar para baixar
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-${{ github.run_number }}
+          name: Claude Futebol (APK ${{ github.run_number }})
+          body: Baixe o arquivo ClaudeFutebol.apk abaixo e instale no Android.
+          files: ClaudeFutebol.apk
+          make_latest: true
