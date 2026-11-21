@@ -243,7 +243,7 @@ export class Cena {
           const m = o as THREE.Mesh;
           if (m.isMesh) { m.castShadow = this.sombras; m.frustumCulled = false; const mm = Array.isArray(m.material) ? m.material : [m.material]; materiais.push(...mm); }
         });
-        raiz.add(corpo);
+        corpo.scale.setScalar(1.15); raiz.add(corpo);
         mixer = new THREE.AnimationMixer(corpo);
         for (const clip of gltf.animations) {
           const nome = clip.name as Anim;
@@ -363,7 +363,7 @@ export class Cena {
     // câmera de TV acompanhando a bola
     const alvoX = THREE.MathUtils.clamp(bo.x, -e.comp / 2 + 8, e.comp / 2 - 8);
     if (this.modoCamera === 'tv') {
-      const desejada = new THREE.Vector3(alvoX * 0.9, 21, e.larg / 2 + 19);
+      const desejada = new THREE.Vector3(alvoX * 0.9, 16, e.larg / 2 + 14);
       this.camera.position.lerp(desejada, Math.min(1, dt * 2.5));
       this.camAlvo.lerp(new THREE.Vector3(alvoX, 0, bo.z * 0.35 - 1), Math.min(1, dt * 3));
     } else {
