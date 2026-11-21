@@ -13,6 +13,7 @@ import { Mapa, MAPA_PADRAO } from './src/dados/mapas';
 import { porId, RARIDADES } from './src/dados/personagens';
 import Botao from './src/ui/Botao';
 import { COR } from './src/ui/tema';
+import { TelaDeitada } from './src/ui/tela';
 
 type Tela = 'lobby' | 'personagens' | 'caixa' | 'partida' | 'editor' | 'mapas' | 'resultado';
 
@@ -100,7 +101,7 @@ export default function App() {
   return (
     <View style={{ flex: 1, backgroundColor: COR.fundo }}>
       <StatusBar hidden />
-      {conteudo}
+      <TelaDeitada>{conteudo}</TelaDeitada>
     </View>
   );
 }

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, Platform, Pressable, ActivityIndicator, useWindowDimensions } from 'react-native';
+import { View, Text, Platform, Pressable, ActivityIndicator, } from 'react-native';
 import * as THREE from 'three';
 import Palco3D from '../jogo/Palco3D';
 import { Cena, ModoCamera } from '../jogo/cena';
@@ -9,6 +9,7 @@ import { Mapa } from '../dados/mapas';
 import { porId, PERSONAGENS } from '../dados/personagens';
 import Botao from '../ui/Botao';
 import { COR } from '../ui/tema';
+import { useTela, pontoNaTela } from '../ui/tela';
 
 interface Props {
   mapa: Mapa; meuId: string; meuNivel: number; trofeus: number;
@@ -21,7 +22,8 @@ interface Hud { placar: [number, number]; tempo: number; superCarga: number; fas
 const sorteio = <T,>(a: T[]) => a[(Math.random() * a.length) | 0];
 
 export default function Partida({ mapa, meuId, meuNivel, trofeus, aoTerminar, sair }: Props) {
-  const { width: W, height: H } = useWindowDimensions();
+  const tela = useTela(); const { width: W, height: H } = tela;
+  const telaRef = useRef(tela); telaRef.current = tela;
   const [pronto, setPronto] = useState(false);
   const [hud, setHud] = useState<Hud>({ placar: [0, 0], tempo: 150, superCarga: 0, fase: 'saida', prorrog: false, msg: '', vencedor: -1 });
   const [camera, setCamera] = useState<ModoCamera>('tv');
@@ -42,7 +44,7 @@ export default function Partida({ mapa, meuId, meuNivel, trofeus, aoTerminar, sa
     const adv = [sorteio(todos), sorteio(todos), sorteio(todos)];
     const e = criarPartida(mapa, [{ id: meuId, nivel: meuNivel }, ...companheiros.map(id => ({ id, nivel: nivelBot }))], adv.map(id => ({ id, nivel: nivelBot })));
     estado.current = e;
-    carregarModelos([meuId, ...companheiros, ...adv]).then(m => { if (vivo) { modelos.current = m; setPronto(true); } });
+    carregarModelos([meuId, ...companheiros, ...adv, 'estadio', 'bola']).then(m => { if (vivo) { modelos.current = m; setPronto(true); } });
     return () => { vivo = false; };
   }, []);
 
@@ -118,8 +120,9 @@ export default function Partida({ mapa, meuId, meuNivel, trofeus, aoTerminar, sa
   useEffect(() => {
     if (Platform.OS !== 'web' || !pronto) return;
     const el = camada.current as unknown as HTMLElement; if (!el) return;
-    const d = (ev: PointerEvent) => { ev.preventDefault(); el.setPointerCapture?.(ev.pointerId); ctl.current.inicio(ev.pointerId, ev.clientX, ev.clientY); };
-    const m = (ev: PointerEvent) => ctl.current.mover(ev.pointerId, ev.clientX, ev.clientY);
+    const pt = (ev: PointerEvent) => pontoNaTela(telaRef.current, ev.clientX, ev.clientY);
+    const d = (ev: PointerEvent) => { ev.preventDefault(); el.setPointerCapture?.(ev.pointerId); const p = pt(ev); ctl.current.inicio(ev.pointerId, p.x, p.y); };
+    const m = (ev: PointerEvent) => { const p = pt(ev); ctl.current.mover(ev.pointerId, p.x, p.y); };
     const u = (ev: PointerEvent) => ctl.current.fim(ev.pointerId);
     el.addEventListener('pointerdown', d); el.addEventListener('pointermove', m); el.addEventListener('pointerup', u); el.addEventListener('pointercancel', u);
     return () => { el.removeEventListener('pointerdown', d); el.removeEventListener('pointermove', m); el.removeEventListener('pointerup', u); el.removeEventListener('pointercancel', u); };

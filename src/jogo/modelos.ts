@@ -11,6 +11,8 @@ export const ARQUIVOS_MODELOS: Record<string, number> = {
   sombra: require('../../assets/modelos/sombra.glb'),
   rei: require('../../assets/modelos/rei.glb'),
   fenix: require('../../assets/modelos/fenix.glb'),
+  estadio: require('../../assets/modelos/estadio.glb'),
+  bola: require('../../assets/modelos/bola.glb'),
 };
 
 export const RETRATOS: Record<string, number> = {

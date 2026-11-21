@@ -26,7 +26,7 @@ export class Cena {
   scene = new THREE.Scene();
   camera: THREE.PerspectiveCamera;
   bonecos: Boneco[] = [];
-  bola!: THREE.Mesh;
+  bola!: THREE.Object3D;
   sombraBola!: THREE.Mesh;
   murosGrupo = new THREE.Group();
   efeitosGrupo = new THREE.Group();
@@ -42,9 +42,15 @@ export class Cena {
   mira: { x: number; z: number; super: boolean } | null = null;
   private seta!: THREE.Mesh;
 
+  private modeloEstadio?: THREE.Object3D;
+  private modeloBola?: THREE.Object3D;
+  private matsBola: THREE.MeshStandardMaterial[] = [];
+
   constructor(public renderer: THREE.WebGLRenderer, largura: number, altura: number, e: Estado, modelos: Record<string, GLTF>, sombras: boolean) {
     this.sombras = sombras;
-    this.camera = new THREE.PerspectiveCamera(38, largura / altura, 0.3, 600);
+    if (modelos.estadio) { this.modeloEstadio = modelos.estadio.scene.clone(true); this.modeloEstadio.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh) { m.receiveShadow = sombras; } }); }
+    if (modelos.bola) this.modeloBola = modelos.bola.scene.clone(true);
+    this.camera = new THREE.PerspectiveCamera(42, largura / altura, 0.3, 600);
     renderer.setPixelRatio(1);
     renderer.setSize(largura, altura, false);
     renderer.shadowMap.enabled = sombras;
@@ -126,7 +132,7 @@ export class Cena {
     }
 
     // arquibancadas + torcida
-    this.montarArquibancada(e, noite);
+    this.montarArquibancada(e, noite, this.modeloEstadio);
 
     // peças do mapa (zonas)
     for (const z of e.zonas) {
@@ -181,52 +187,63 @@ export class Cena {
     for (const sz of [-1, 1]) { const lado = new THREE.Mesh(new THREE.PlaneGeometry(fundo, alt, 6, 8), rede); lado.position.set(x + sx * fundo / 2, alt / 2, sz * gl / 2); s.add(lado); }
   }
 
-  private montarArquibancada(e: Estado, noite: boolean) {
-    const s = this.scene; const C = e.comp / 2 + 7, L = e.larg / 2 + 7;
+  private montarArquibancada(e: Estado, noite: boolean, modelo?: THREE.Object3D) {
+    // com o estádio do Blender: monta tudo no tamanho do campo médio e estica para o tamanho do mapa
+    const usaModelo = !!modelo && e.mapa.tema !== 'lua';
+    const comp = usaModelo ? 60 : e.comp, larg = usaModelo ? 36 : e.larg;
+    const raiz = new THREE.Group();
+    if (usaModelo) { raiz.scale.set(e.comp / 60, 1, e.larg / 36); raiz.add(modelo!); }
+    this.scene.add(raiz);
+    const C = comp / 2 + 7, L = larg / 2 + 7;
     const concreto = new THREE.MeshStandardMaterial({ color: e.mapa.tema === 'lua' ? 0x333340 : 0x8a8f99, roughness: 0.9 });
     const lados: { cx: number; cz: number; comp: number; rot: number }[] = [
-      { cx: 0, cz: -L, comp: e.comp + 14, rot: 0 }, { cx: 0, cz: L, comp: e.comp + 14, rot: Math.PI },
-      { cx: -C, cz: 0, comp: e.larg + 14, rot: Math.PI / 2 }, { cx: C, cz: 0, comp: e.larg + 14, rot: -Math.PI / 2 },
+      { cx: 0, cz: -L, comp: comp + 14, rot: 0 }, { cx: 0, cz: L, comp: comp + 14, rot: Math.PI },
+      { cx: -C, cz: 0, comp: larg + 14, rot: Math.PI / 2 }, { cx: C, cz: 0, comp: larg + 14, rot: -Math.PI / 2 },
     ];
     const degraus = 7;
     const posicoes: THREE.Matrix4[] = []; const cores: THREE.Color[] = [];
-    const paleta = [0xffffff, 0xffd60a, 0x1e88ff, 0xff3b3b, 0x2ecc71, 0x111111, 0xff7f50];
+    const paleta = [0xffffff, 0xffd60a, 0x1e88ff, 0xff3b3b, 0x2ecc71, 0x111111, 0xff7f50, 0xf5d0a9];
     const tmp = new THREE.Object3D();
     for (const l of lados) {
-      const g = new THREE.Group(); g.position.set(l.cx, 0, l.cz); g.rotation.y = l.rot;
-      // placas de publicidade
-      const placa = new THREE.Mesh(new THREE.BoxGeometry(l.comp - 4, 0.9, 0.15), new THREE.MeshStandardMaterial({ color: 0x0b1a33, emissive: 0x1e40af, emissiveIntensity: noite ? 0.9 : 0.4 }));
-      placa.position.set(0, 0.45, 3.2); g.add(placa);
+      const g = new THREE.Group(); g.position.set(l.cx, 0, l.cz); g.rotation.y = l.rot; g.updateMatrix();
+      if (!usaModelo) {
+        const placa = new THREE.Mesh(new THREE.BoxGeometry(l.comp - 4, 0.9, 0.15), new THREE.MeshStandardMaterial({ color: 0x0b1a33, emissive: 0x1e40af, emissiveIntensity: noite ? 0.9 : 0.4 }));
+        placa.position.set(0, 0.45, 3.2); g.add(placa);
+        for (let d = 0; d < degraus; d++) {
+          const deg = new THREE.Mesh(new THREE.BoxGeometry(l.comp, 0.8, 1.4), concreto);
+          deg.position.set(0, 0.4 + d * 0.8, -d * 1.4); g.add(deg);
+        }
+        const cob = new THREE.Mesh(new THREE.BoxGeometry(l.comp, 0.3, 6), new THREE.MeshStandardMaterial({ color: 0xdde3ea, metalness: 0.3, roughness: 0.5 }));
+        cob.position.set(0, degraus * 0.8 + 3.5, -degraus * 1.4 + 2); g.add(cob);
+        raiz.add(g);
+      }
+      if (e.mapa.tema === 'lua') continue;
       for (let d = 0; d < degraus; d++) {
-        const deg = new THREE.Mesh(new THREE.BoxGeometry(l.comp, 0.8, 1.4), concreto);
-        deg.position.set(0, 0.4 + d * 0.8, -d * 1.4); deg.receiveShadow = false; g.add(deg);
-        if (e.mapa.tema === 'lua') continue;
         for (let k = -l.comp / 2 + 0.5; k < l.comp / 2 - 0.5; k += 0.75) {
           if (Math.random() < 0.15) continue;
-          tmp.position.set(k + (Math.random() - 0.5) * 0.2, 1.1 + d * 0.8, -d * 1.4); tmp.updateMatrix();
-          g.updateMatrixWorld(true);
-          posicoes.push(new THREE.Matrix4().multiplyMatrices(g.matrixWorld, tmp.matrix));
+          tmp.position.set(k + (Math.random() - 0.5) * 0.2, 1.15 + d * 0.8, -d * 1.4 + 0.15); tmp.updateMatrix();
+          posicoes.push(new THREE.Matrix4().multiplyMatrices(g.matrix, tmp.matrix));
           cores.push(new THREE.Color(paleta[(Math.random() * paleta.length) | 0]));
         }
       }
-      // cobertura
-      const cob = new THREE.Mesh(new THREE.BoxGeometry(l.comp, 0.3, 6), new THREE.MeshStandardMaterial({ color: 0xdde3ea, metalness: 0.3, roughness: 0.5 }));
-      cob.position.set(0, degraus * 0.8 + 3.5, -degraus * 1.4 + 2); g.add(cob);
-      s.add(g);
     }
     if (posicoes.length) {
-      const geo = new THREE.BoxGeometry(0.45, 0.7, 0.35);
+      const geo = new THREE.BoxGeometry(0.42, 0.72, 0.32);
       const inst = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ roughness: 0.8 }), posicoes.length);
-      posicoes.forEach((m, i) => { inst.setMatrixAt(i, m); inst.setColorAt(i, cores[i]); this.torcidaBase.push({ y: new THREE.Vector3().setFromMatrixPosition(m).y, fase: Math.random() * 6.28 }); });
+      for (let i = 0; i < posicoes.length; i++) {
+        inst.setMatrixAt(i, posicoes[i]); inst.setColorAt(i, cores[i]);
+        this.torcidaBase.push({ y: new THREE.Vector3().setFromMatrixPosition(posicoes[i]).y, fase: Math.random() * 6.28 });
+      }
       inst.instanceMatrix.needsUpdate = true; if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
-      this.torcida = inst; s.add(inst);
+      this.torcida = inst; raiz.add(inst);
     }
-    // torres de luz
-    for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
-      const tx = x * (C + 8), tz = z * (L + 8);
-      const t = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.6, 30, 8), concreto); t.position.set(tx, 15, tz); s.add(t);
-      const luz = new THREE.Mesh(new THREE.BoxGeometry(4, 2.5, 0.6), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: noite ? 2 : 0.6 }));
-      luz.position.set(tx, 30, tz); luz.lookAt(0, 0, 0); s.add(luz);
+    if (!usaModelo) {
+      for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+        const tx = x * (C + 8), tz = z * (L + 8);
+        const t = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.6, 30, 8), concreto); t.position.set(tx, 15, tz); raiz.add(t);
+        const luz = new THREE.Mesh(new THREE.BoxGeometry(4, 2.5, 0.6), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: noite ? 2 : 0.6 }));
+        luz.position.set(tx, 30, tz); luz.lookAt(0, 0, 0); raiz.add(luz);
+      }
     }
   }
 
@@ -286,8 +303,15 @@ export class Cena {
       for (let k = 0; k < 3; k++) cores.set(preto ? [0.05, 0.05, 0.05] : [0.97, 0.97, 0.97], (i + k) * 3);
     }
     g.setAttribute('color', new THREE.BufferAttribute(cores, 3)); g.computeVertexNormals();
-    this.bola = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.4 }));
-    this.bola.castShadow = this.sombras; this.scene.add(this.bola);
+    if (this.modeloBola) {
+      const grupo = new THREE.Group(); grupo.add(this.modeloBola);
+      this.modeloBola.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh) { m.castShadow = this.sombras; const mm = (Array.isArray(m.material) ? m.material : [m.material]) as THREE.MeshStandardMaterial[]; mm.forEach(x => { const c = x.clone(); this.matsBola.push(c); }); m.material = Array.isArray(m.material) ? this.matsBola.slice(-mm.length) : this.matsBola[this.matsBola.length - 1]; } });
+      this.bola = grupo; this.scene.add(grupo);
+    } else {
+      const mesh = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.4 }));
+      mesh.castShadow = this.sombras; this.matsBola.push(mesh.material as THREE.MeshStandardMaterial);
+      this.bola = mesh; this.scene.add(mesh);
+    }
     this.sombraBola = new THREE.Mesh(new THREE.CircleGeometry(0.25, 16), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35 }));
     this.sombraBola.rotation.x = -Math.PI / 2; this.sombraBola.position.y = 0.02; this.scene.add(this.sombraBola);
   }
@@ -328,9 +352,10 @@ export class Cena {
     const v = Math.hypot(bo.vx, bo.vz);
     if (v > 0.1) { const eixo = new THREE.Vector3(bo.vz, 0, -bo.vx).normalize(); this.bola.rotateOnWorldAxis(eixo, (v * dt) / 0.22); }
     this.sombraBola.position.set(bo.x, 0.02, bo.z); this.sombraBola.scale.setScalar(Math.max(0.4, 1 - bo.y * 0.15));
-    const matBola = this.bola.material as THREE.MeshStandardMaterial;
-    matBola.emissive.set(bo.especial === 'ouro' ? 0xffc400 : bo.especial === 'canhao' ? 0xff5500 : 0x000000);
-    matBola.emissiveIntensity = bo.especial ? 1.2 : 0;
+    for (const matBola of this.matsBola) {
+      matBola.emissive.set(bo.especial === 'ouro' ? 0xffc400 : bo.especial === 'canhao' ? 0xff5500 : 0x000000);
+      matBola.emissiveIntensity = bo.especial ? 1.2 : 0;
+    }
 
     const setaG = this.seta.parent!;
     const hum = e.jogadores.find(j => j.humano);
@@ -363,9 +388,9 @@ export class Cena {
     // câmera de TV acompanhando a bola
     const alvoX = THREE.MathUtils.clamp(bo.x, -e.comp / 2 + 8, e.comp / 2 - 8);
     if (this.modoCamera === 'tv') {
-      const desejada = new THREE.Vector3(alvoX * 0.9, 16, e.larg / 2 + 14);
+      const desejada = new THREE.Vector3(alvoX * 0.85, 10.5, e.larg / 2 + 12);
       this.camera.position.lerp(desejada, Math.min(1, dt * 2.5));
-      this.camAlvo.lerp(new THREE.Vector3(alvoX, 0, bo.z * 0.35 - 1), Math.min(1, dt * 3));
+      this.camAlvo.lerp(new THREE.Vector3(alvoX, 0, bo.z * 0.35 - 3), Math.min(1, dt * 3));
     } else {
       const h = humano ?? e.jogadores[0];
       const desejada = new THREE.Vector3(h.x * 0.85 + bo.x * 0.15, 11, h.z + 13);

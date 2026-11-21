@@ -21,9 +21,48 @@ CHARS = [
  ('fenix',  (1.0,0.45,0.05), (0.70,0.05,0.05),(1.0,0.45,0.05), (0.88,0.68,0.55),(0.95,0.55,0.10),'moicano',(1.0,0.3,0.0),   'barba'),
 ]
 
+NUMEROS = {'chico':10,'bia':7,'tonhao':4,'lia':2,'pipoca':11,'gelo':5,'tornado':8,'ima':9,'sombra':17,'rei':23,'fenix':99}
+
+def numero(txt, loc, tam, rotz, m):
+    bpy.ops.object.text_add(location=loc, rotation=(math.pi/2, 0, rotz))
+    t = bpy.context.object; t.data.body = txt; t.data.size = tam; t.data.extrude = 0.004
+    t.data.align_x = 'CENTER'; t.data.align_y = 'CENTER'
+    try: t.data.body_format[0].use_bold = True
+    except Exception: pass
+    t.data.materials.append(m)
+    bpy.ops.object.convert(target='MESH')
+    return bpy.context.object
+
+def detalhes(cid, camisa, calcao, mB):
+    ps = []
+    claro = sum(camisa) / 3 > 0.6
+    mN = mat('numero', (0.05,0.05,0.08) if claro else (1,1,1), 0.5)
+    n = str(NUMEROS.get(cid, 10))
+    ps.append(numero(n, (0, 0.142, 1.27), 0.2, math.pi, mN))      # costas
+    ps.append(numero(n, (0.08, -0.142, 1.36), 0.07, 0, mN))       # peito
+    # gola
+    bpy.ops.mesh.primitive_torus_add(location=(0, 0, 1.485), major_radius=0.072, minor_radius=0.014, major_segments=24, minor_segments=6)
+    g = bpy.context.object; g.scale = (1, 0.92, 1); g.data.materials.append(mat('gola', calcao, 0.6)); ps.append(g)
+    # punho da manga
+    for s2 in (1, -1):
+        bpy.ops.mesh.primitive_torus_add(location=(s2*0.272, 0.005, 1.31), major_radius=0.056, minor_radius=0.01, major_segments=16, minor_segments=5, rotation=(0, s2*math.radians(-25), 0))
+        p = bpy.context.object; p.data.materials.append(mat('punho', calcao, 0.6)); ps.append(p)
+    # sola branca com travas
+    sola = mat('sola', (0.95,0.95,0.95), 0.5)
+    for s2 in (1, -1):
+        bpy.ops.mesh.primitive_cube_add(location=(s2*0.11, -0.04, 0.008)); b = bpy.context.object
+        b.scale = (0.05, 0.135, 0.008); b.data.materials.append(sola); ps.append(b)
+        for k in range(3):
+            bpy.ops.mesh.primitive_cylinder_add(radius=0.009, depth=0.012, location=(s2*0.11, -0.12 + k*0.07, -0.004), vertices=8)
+            t = bpy.context.object; t.data.materials.append(sola); ps.append(t)
+        # faixa da chuteira
+        bpy.ops.mesh.primitive_cube_add(location=(s2*(0.11+0.049), -0.04, 0.05)); f = bpy.context.object
+        f.scale = (0.003, 0.07, 0.012); f.rotation_euler = (math.radians(20), 0, 0); f.data.materials.append(sola); ps.append(f)
+    return ps
+
 def limpar():
     for o in list(bpy.data.objects): bpy.data.objects.remove(o, do_unlink=True)
-    for coll in (bpy.data.meshes, bpy.data.materials, bpy.data.armatures, bpy.data.actions, bpy.data.cameras, bpy.data.lights):
+    for coll in (bpy.data.meshes, bpy.data.materials, bpy.data.armatures, bpy.data.actions, bpy.data.cameras, bpy.data.lights, bpy.data.curves):
         for x in list(coll):
             try: coll.remove(x)
             except Exception: pass
@@ -295,7 +334,7 @@ def fazer(cid, camisa, calcao, meiao, pele, cab, estilo, chut, extra):
     mC = mat('camisa', camisa, 0.8); mS = mat('calcao', calcao, 0.7); mM = mat('meiao', meiao, 0.9)
     mP = mat('pele', pele, 0.5, sss=0.15); mB = mat('chuteira', chut, 0.35); mH = mat('cabelo', cab, 0.85)
     c = corpo(mC, mS, mM, mP, mB)
-    partes = cabeca(mP, mH, estilo, extra) + chuteiras(mB)
+    partes = cabeca(mP, mH, estilo, extra) + chuteiras(mB) + detalhes(cid, camisa, calcao, mB)
     bpy.ops.object.select_all(action='DESELECT')
     for p in partes: p.select_set(True)
     c.select_set(True); bpy.context.view_layer.objects.active = c

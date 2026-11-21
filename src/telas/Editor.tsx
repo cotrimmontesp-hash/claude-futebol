@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, TextInput, ScrollView, useWindowDimensions, Platform, Share } from 'react-native';
+import { View, Text, Pressable, TextInput, ScrollView, Platform, Share } from 'react-native';
 import { Mapa, Peca, Tema, Tamanho, PECAS, TEMAS, grade, mapaParaCodigo } from '../dados/mapas';
 import Botao from '../ui/Botao';
 import { COR } from '../ui/tema';
+import { useTela, pontoNaTela } from '../ui/tela';
 import { API_MAPAS } from '../config';
 
 interface Props {
@@ -13,7 +14,7 @@ interface Props {
 const corTema: Record<Tema, string> = { grama: '#3a9b45', areia: '#e3cc98', neve: '#eef4f8', rua: '#5e6168', lua: '#9a9aa0' };
 
 export default function Editor({ inicial, autor, voltar, salvar, testar }: Props) {
-  const { width, height } = useWindowDimensions();
+  const { width, height } = useTela();
   const [m, setM] = useState<Mapa>(inicial ?? {
     id: 'meu-' + Date.now().toString(36), nome: 'Meu campo', autor, tema: 'grama', tamanho: 'medio', noite: false, chuva: false, golLargura: 8, pecas: [],
   });

@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, Image, Pressable, TextInput, ScrollView, useWindowDimensions } from 'react-native';
+import { View, Text, Image, Pressable, TextInput, ScrollView, } from 'react-native';
 import { Progresso, hoje } from '../dados/progresso';
 import { porId, RARIDADES, PERSONAGENS } from '../dados/personagens';
 import { Mapa } from '../dados/mapas';
 import { RETRATOS } from '../jogo/modelos';
 import Botao, { Moeda } from '../ui/Botao';
 import { COR } from '../ui/tema';
+import { useTela, pontoNaTela } from '../ui/tela';
 
 interface Props {
   prog: Progresso; mapa: Mapa;
@@ -14,7 +15,7 @@ interface Props {
 }
 
 export default function Lobby({ prog, mapa, ir, jogar, mudarNome, premioDiario }: Props) {
-  const { width, height } = useWindowDimensions();
+  const { width, height } = useTela();
   const p = porId(prog.escolhido); const r = RARIDADES[p.raridade];
   const [editNome, setEditNome] = useState(false);
   const proximo = PERSONAGENS.filter(c => c.trofeusParaLiberar !== undefined && !prog.liberados[c.id]).sort((a, b) => a.trofeusParaLiberar! - b.trofeusParaLiberar!)[0];
