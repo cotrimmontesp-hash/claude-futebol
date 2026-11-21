@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "Claude Futebol",
+    "slug": "claude-futebol",
+    "version": "1.0.0",
+    "orientation": "landscape",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0b1a33",
+    "icon": "./assets/icone.png",
+    "splash": { "image": "./assets/icone.png", "resizeMode": "contain", "backgroundColor": "#0b1a33" },
+    "assetBundlePatterns": ["**/*"],
+    "ios": { "supportsTablet": true, "bundleIdentifier": "com.claude.futebol", "requireFullScreen": true },
+    "android": {
+      "package": "com.claude.futebol",
+      "adaptiveIcon": { "foregroundImage": "./assets/icone.png", "backgroundColor": "#0b1a33" }
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "name": "Claude Futebol",
+      "shortName": "Futebol",
+      "themeColor": "#0b1a33",
+      "backgroundColor": "#0b1a33",
+      "orientation": "landscape",
+      "display": "fullscreen",
+      "favicon": "./assets/icone.png"
+    },
+    "plugins": ["expo-asset", "expo-screen-orientation"]
+  }
+}
