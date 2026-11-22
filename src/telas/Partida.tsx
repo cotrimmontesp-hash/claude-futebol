@@ -126,7 +126,7 @@ export default function Partida({ mapa, meuId, meuNivel, trofeus, aoTerminar, sa
     const semRolar = (ev: TouchEvent) => ev.preventDefault();
     el.addEventListener('touchstart', semRolar, { passive: false }); el.addEventListener('touchmove', semRolar, { passive: false });
     const pt = (ev: PointerEvent) => pontoNaTela(telaRef.current, ev.clientX, ev.clientY);
-    const d = (ev: PointerEvent) => { ev.preventDefault(); el.setPointerCapture?.(ev.pointerId); const p = pt(ev); ctl.current.inicio(ev.pointerId, p.x, p.y); };
+    const d = (ev: PointerEvent) => { ev.preventDefault(); try { el.setPointerCapture?.(ev.pointerId); } catch {} const p = pt(ev); ctl.current.inicio(ev.pointerId, p.x, p.y); };
     const m = (ev: PointerEvent) => { const p = pt(ev); ctl.current.mover(ev.pointerId, p.x, p.y); };
     const u = (ev: PointerEvent) => ctl.current.fim(ev.pointerId);
     el.addEventListener('pointerdown', d); el.addEventListener('pointermove', m); el.addEventListener('pointerup', u); el.addEventListener('pointercancel', u);

@@ -33,8 +33,48 @@ def numero(txt, loc, tam, rotz, m):
     bpy.ops.object.convert(target='MESH')
     return bpy.context.object
 
+def tubo(p1, p2, r1, r2, m, esc_y=1.0, seg=24):
+    p1, p2 = Vector(p1), Vector(p2); d = p2 - p1
+    bpy.ops.mesh.primitive_cone_add(radius1=r1, radius2=r2, depth=d.length, vertices=seg, end_fill_type='NOTHING', location=(p1 + p2) / 2)
+    o = bpy.context.object; o.rotation_mode = 'QUATERNION'; o.rotation_quaternion = d.to_track_quat('Z', 'Y')
+    o.scale = (1, esc_y, 1)
+    sl = o.modifiers.new('esp', 'SOLIDIFY'); sl.thickness = 0.006
+    o.data.materials.append(m); aplicar_mods(o); bpy.ops.object.shade_smooth()
+    o.rotation_mode = 'XYZ'; return o
+
+def mao(s, mP):
+    ps = []
+    w = Vector((s*0.415, -0.02, 0.955))
+    bpy.ops.mesh.primitive_cube_add(location=(s*0.43, -0.025, 0.905)); palma = bpy.context.object
+    palma.scale = (0.016, 0.04, 0.045); palma.data.materials.append(mP)
+    bv = palma.modifiers.new('bv', 'BEVEL'); bv.width = 0.012; bv.segments = 4; aplicar_mods(palma); bpy.ops.object.shade_smooth(); ps.append(palma)
+    for k in range(4):  # dedos levemente dobrados
+        y = -0.052 + k*0.022; comp = 0.062 - abs(k-1.3)*0.01
+        a = (s*0.432, y, 0.86); b = (s*0.425, y - 0.006, 0.86 - comp)
+        ps.append(tubo(a, b, 0.0095, 0.0078, mP, 1.0, 10))
+        ps.append(esfera(b, (0.0078, 0.0078, 0.0078), mP, 10, 6))
+    a = (s*0.425, -0.055, 0.915); b = (s*0.41, -0.085, 0.875)   # dedão
+    ps.append(tubo(a, b, 0.011, 0.009, mP, 1.0, 10)); ps.append(esfera(b, (0.009, 0.009, 0.009), mP, 10, 6))
+    return ps
+
 def detalhes(cid, camisa, calcao, mB):
     ps = []
+    mPano = mat('camisa_pano', camisa, 0.85); mCal = mat('calcao_pano', calcao, 0.75)
+    for s2 in (1, -1):
+        ps.append(tubo((s2*0.222, 0.0, 1.425), (s2*0.274, 0.006, 1.30), 0.068, 0.059, mPano))          # manga
+        ps.append(tubo((s2*0.098, 0.0, 0.88), (s2*0.106, -0.008, 0.70), 0.112, 0.106, mCal))          # perna do calção
+    ps.append(tubo((0, 0, 0.93), (0, 0, 1.08), 0.17, 0.162, mPano, 0.74, 32))                          # barra da camisa
+    mMeia = None
+    for f in bpy.data.materials:
+        if f.name.startswith('meiao'): mMeia = f
+    if mMeia:
+        for s2 in (1, -1):
+            ps.append(tubo((s2*0.11, -0.012, 0.50), (s2*0.11, -0.008, 0.44), 0.066, 0.07, mMeia, 1.0, 20))  # dobra do meião
+            ps.append(esfera((s2*0.11, -0.05, 0.31), (0.045, 0.02, 0.08), mMeia, 16, 10))                   # caneleira
+    pele = None
+    for f in bpy.data.materials:
+        if f.name.startswith('pele'): pele = f
+    for s2 in (1, -1): ps += mao(s2, pele)
     claro = sum(camisa) / 3 > 0.6
     mN = mat('numero', (0.05,0.05,0.08) if claro else (1,1,1), 0.5)
     n = str(NUMEROS.get(cid, 10))
@@ -98,19 +138,22 @@ def aplicar_mods(o):
 
 # ---------- corpo (skin modifier) ----------
 J = {
- 'pelvis':(0,0,0.98,.165,.115), 'barriga':(0,0,1.15,.15,.105), 'peito':(0,0,1.33,.19,.125),
- 'pesc0':(0,0,1.50,.068,.065), 'pesc1':(0,0,1.58,.06,.06),
+ 'pelvis':(0,0,0.98,.165,.115), 'barriga':(0,0,1.12,.148,.102), 'cintura':(0,0,1.20,.152,.105),
+ 'peito':(0,0,1.33,.195,.128), 'ombros':(0,0,1.43,.17,.11),
+ 'pesc0':(0,0,1.50,.066,.064), 'pesc1':(0,0,1.58,.058,.06),
 }
 for s,l in ((1,'L'),(-1,'R')):
-    J['quad'+l]=(s*0.095,0,0.93,.105,.105); J['joelho'+l]=(s*0.11,-0.01,0.52,.06,.065)
-    J['pantu'+l]=(s*0.11,0.0,0.38,.068,.072); J['torn'+l]=(s*0.11,0.02,0.10,.042,.042)
+    J['quad'+l]=(s*0.095,0,0.93,.108,.108); J['coxa'+l]=(s*0.10,-0.008,0.74,.092,.098)
+    J['joelho'+l]=(s*0.11,-0.012,0.52,.058,.062); J['pantu'+l]=(s*0.11,0.008,0.38,.066,.074)
+    J['canela'+l]=(s*0.11,0.01,0.22,.046,.048); J['torn'+l]=(s*0.11,0.02,0.10,.038,.040)
     J['calc'+l]=(s*0.11,0.05,0.04,.035,.035); J['dedo'+l]=(s*0.11,-0.14,0.03,.035,.025)
-    J['omb'+l]=(s*0.21,0,1.44,.068,.062); J['cot'+l]=(s*0.33,0.01,1.18,.046,.046)
-    J['pulso'+l]=(s*0.42,-0.02,0.95,.034,.028); J['mao'+l]=(s*0.46,-0.03,0.84,.04,.024)
-E = [('pelvis','barriga'),('barriga','peito'),('peito','pesc0'),('pesc0','pesc1')]
+    J['omb'+l]=(s*0.215,0,1.435,.078,.07); J['delt'+l]=(s*0.25,0.005,1.37,.062,.058)
+    J['bic'+l]=(s*0.29,0.008,1.27,.056,.054); J['cot'+l]=(s*0.33,0.01,1.18,.042,.042)
+    J['antb'+l]=(s*0.365,-0.002,1.09,.05,.045); J['pulso'+l]=(s*0.415,-0.02,0.955,.034,.028)
+E = [('pelvis','barriga'),('barriga','cintura'),('cintura','peito'),('peito','ombros'),('ombros','pesc0'),('pesc0','pesc1')]
 for l in 'LR':
-    E += [('pelvis','quad'+l),('quad'+l,'joelho'+l),('joelho'+l,'pantu'+l),('pantu'+l,'torn'+l),
-          ('torn'+l,'calc'+l),('torn'+l,'dedo'+l),('peito','omb'+l),('omb'+l,'cot'+l),('cot'+l,'pulso'+l),('pulso'+l,'mao'+l)]
+    E += [('pelvis','quad'+l),('quad'+l,'coxa'+l),('coxa'+l,'joelho'+l),('joelho'+l,'pantu'+l),('pantu'+l,'canela'+l),('canela'+l,'torn'+l),
+          ('torn'+l,'calc'+l),('torn'+l,'dedo'+l),('ombros','omb'+l),('omb'+l,'delt'+l),('delt'+l,'bic'+l),('bic'+l,'cot'+l),('cot'+l,'antb'+l),('antb'+l,'pulso'+l)]
 
 def corpo(mC, mS, mM, mP, mB):
     nomes = list(J.keys()); idx = {n:i for i,n in enumerate(nomes)}
@@ -121,7 +164,7 @@ def corpo(mC, mS, mM, mP, mB):
     for i,n in enumerate(nomes):
         d = me.skin_vertices[0].data[i]; d.radius = (J[n][3], J[n][4])
         d.use_root = (n == 'pelvis')
-    ss = o.modifiers.new('sub','SUBSURF'); ss.levels = 2; ss.render_levels = 2
+    ss = o.modifiers.new('sub','SUBSURF'); ss.levels = 3; ss.render_levels = 3
     aplicar_mods(o)
     for m in (mC, mS, mM, mP, mB): o.data.materials.append(m)
     for f in o.data.polygons:
@@ -130,7 +173,7 @@ def corpo(mC, mS, mM, mP, mB):
             if x > 0.215: k = 0 if z > 1.30 else 3          # manga / antebraco
             else:         k = 3 if z > 1.49 else 0          # pescoco / tronco
         else:
-            if x > 0.30: k = 3                               # mao
+            if x > 0.30: k = 3                               # pulso
             elif z > 0.70: k = 1                             # calcao
             elif z > 0.50: k = 3                             # joelho
             elif z > 0.13: k = 2                             # meiao
@@ -155,28 +198,47 @@ def cabeca(mP, mH, estilo, extra):
     hz = 1.71
     h = esfera((0,0,hz), (0.1,0.115,0.13), mP); partes.append(h)
     partes.append(esfera((0,-0.035,1.635), (0.07,0.07,0.06), mP))           # queixo/mandibula
-    bpy.ops.mesh.primitive_cone_add(radius1=0.018, depth=0.045, location=(0,-0.115,1.70), rotation=(math.radians(-80),0,0), vertices=12)
-    n = bpy.context.object; n.data.materials.append(mP); bpy.ops.object.shade_smooth(); partes.append(n)
+    # nariz: ponte, ponta e asas
+    partes.append(esfera((0,-0.106,1.712), (0.011,0.012,0.028), mP, 16, 10))
+    partes.append(esfera((0,-0.118,1.692), (0.015,0.013,0.012), mP, 16, 10))
+    for s in (1,-1): partes.append(esfera((s*0.012,-0.11,1.688), (0.008,0.009,0.007), mP, 12, 8))
+    labio = mat('labio', tuple(c*0.78 for c in mP.diffuse_color[:3]), 0.4)
+    partes.append(esfera((0,-0.103,1.659), (0.022,0.008,0.0055), labio, 20, 10))   # lábio de cima
+    partes.append(esfera((0,-0.101,1.650), (0.02,0.009,0.0065), labio, 20, 10))    # lábio de baixo
     for s in (1,-1):
-        partes.append(esfera((s*0.095,0.0,1.70), (0.015,0.03,0.035), mP, 12, 8))   # orelha
-        branco = mat('olho', (0.95,0.95,0.95), 0.2); iris = mat('iris', (0.12,0.07,0.04), 0.1)
-        partes.append(esfera((s*0.038,-0.092,1.725), (0.017,0.012,0.012), branco, 16, 8))
-        partes.append(esfera((s*0.038,-0.102,1.725), (0.008,0.004,0.008), iris, 12, 6))
-        bpy.ops.mesh.primitive_cube_add(location=(s*0.04,-0.103,1.752)); sob = bpy.context.object
-        sob.scale = (0.022,0.006,0.005); sob.rotation_euler = (0,s*0.15,0); sob.data.materials.append(mH)
-        bpy.ops.object.transform_apply(scale=True, rotation=True); partes.append(sob)
-    bpy.ops.mesh.primitive_cube_add(location=(0,-0.1,1.655)); boca = bpy.context.object
-    boca.scale = (0.022,0.004,0.004); boca.data.materials.append(mat('boca', (0.45,0.18,0.15)))
-    bpy.ops.object.transform_apply(scale=True); partes.append(boca)
+        partes.append(esfera((s*0.098,0.004,1.70), (0.012,0.028,0.036), mP, 16, 10))   # orelha
+        branco = mat('olho', (0.95,0.95,0.95), 0.15); iris = mat('iris', (0.25,0.15,0.07), 0.1); pupila = mat('pupila', (0.01,0.01,0.01), 0.05)
+        partes.append(esfera((s*0.038,-0.088,1.725), (0.0175,0.0135,0.0145), branco, 20, 12))
+        partes.append(esfera((s*0.038,-0.1005,1.725), (0.0095,0.003,0.0095), iris, 16, 8))
+        partes.append(esfera((s*0.038,-0.1028,1.725), (0.004,0.0012,0.004), pupila, 12, 6))
+        pal = esfera((s*0.038,-0.089,1.729), (0.0185,0.0145,0.0145), mP, 20, 12); cortar(pal, zmin=1.737); partes.append(pal)  # pálpebra
+        for k in range(3):  # sobrancelha arqueada
+            bpy.ops.mesh.primitive_cube_add(location=(s*(0.022+k*0.014), -0.1 + k*0.002, 1.752 + (0.003 if k == 1 else 0)))
+            sob = bpy.context.object; sob.scale = (0.0085,0.005,0.0035); sob.rotation_euler = (0, s*(0.25 - k*0.25), 0)
+            sob.data.materials.append(mH); bpy.ops.object.transform_apply(scale=True, rotation=True); partes.append(sob)
+    import random
+    random.seed(hash(estilo) % 1000)
+    def tufos(n, raio, zmin, esc=1.0):
+        for _ in range(n):
+            th = random.uniform(0, 2*math.pi); ph = random.uniform(0.0, 1.15)
+            p = (math.sin(ph)*math.cos(th)*0.102*esc, 0.008 + math.sin(ph)*math.sin(th)*0.118*esc, hz + 0.012 + math.cos(ph)*0.127*esc)
+            if p[2] < zmin or p[1] < -0.085: continue
+            partes.append(esfera(p, (raio, raio, raio*0.8), mH, 10, 6))
     if estilo == 'curto':
         c = esfera((0,0.008,hz+0.012), (0.1,0.115,0.125), mH); cortar(c, zmin=1.735); partes.append(c)
+        tufos(45, 0.022, 1.75)
     elif estilo == 'black':
         c = esfera((0,0.01,hz+0.05), (0.13,0.14,0.13), mH); cortar(c, zmin=1.72); partes.append(c)
+        tufos(70, 0.035, 1.74, 1.3)
     elif estilo == 'moicano':
         c = esfera((0,0.01,hz+0.03), (0.03,0.12,0.13), mH); cortar(c, zmin=1.75); partes.append(c)
         c2 = esfera((0,0.008,hz+0.006), (0.098,0.113,0.124), mH); cortar(c2, zmin=1.76); partes.append(c2)
+        for k in range(9):
+            a = -0.9 + k*0.25
+            partes.append(esfera((0, 0.008 + math.sin(a)*0.13, hz + 0.02 + math.cos(a)*0.13), (0.018, 0.022, 0.03), mH, 10, 6))
     elif estilo in ('longo','rabo'):
         c = esfera((0,0.01,hz+0.012), (0.102,0.117,0.127), mH); cortar(c, zmin=1.70); partes.append(c)
+        tufos(40, 0.024, 1.74)
         if estilo == 'longo':
             t = esfera((0,0.06,1.6), (0.1,0.05,0.14), mH); partes.append(t)
         else:
@@ -321,7 +383,7 @@ def motor():
         lo = bpy.data.objects.new(nome, ld); bpy.context.collection.objects.link(lo); lo.location = loc
         d = Vector((0,0,1.2)) - Vector(loc); lo.rotation_euler = d.to_track_quat('-Z','Y').to_euler()
 
-def camera_retrato(res=512):
+def camera_retrato(res=640):
     cd = bpy.data.cameras.new('cam'); cd.lens = 55
     c = bpy.data.objects.new('cam', cd); bpy.context.collection.objects.link(c)
     c.location = (1.2,-3.6,1.35)
