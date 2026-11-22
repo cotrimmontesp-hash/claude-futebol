@@ -22,7 +22,7 @@ jobs:
           distribution: temurin
           java-version: 17
       - name: Instalar dependências
-        run: npm install
+        run: npm install && npx expo install --fix
       - name: Gerar projeto Android
         run: npx expo prebuild -p android --no-install
       - name: Compilar APK

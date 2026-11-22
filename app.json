@@ -25,6 +25,6 @@
       "display": "fullscreen",
       "favicon": "./assets/icone.png"
     },
-    "plugins": ["expo-asset", "expo-screen-orientation"]
+    "plugins": ["expo-asset", "expo-screen-orientation", "expo-audio"]
   }
 }

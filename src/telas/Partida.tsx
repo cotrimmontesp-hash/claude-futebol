@@ -5,6 +5,7 @@ import Palco3D from '../jogo/Palco3D';
 import { Cena, ModoCamera } from '../jogo/cena';
 import { criarPartida, passo, Estado, Entrada } from '../jogo/motor';
 import { carregarModelos } from '../jogo/carregar';
+import * as Som from '../jogo/som';
 import { Mapa } from '../dados/mapas';
 import { porId, PERSONAGENS } from '../dados/personagens';
 import Botao from '../ui/Botao';
@@ -44,8 +45,9 @@ export default function Partida({ mapa, meuId, meuNivel, trofeus, aoTerminar, sa
     const adv = [sorteio(todos), sorteio(todos), sorteio(todos)];
     const e = criarPartida(mapa, [{ id: meuId, nivel: meuNivel }, ...companheiros.map(id => ({ id, nivel: nivelBot }))], adv.map(id => ({ id, nivel: nivelBot })));
     estado.current = e;
-    carregarModelos([meuId, ...companheiros, ...adv, 'estadio', 'bola']).then(m => { if (vivo) { modelos.current = m; setPronto(true); } });
-    return () => { vivo = false; };
+    Promise.all([carregarModelos([meuId, ...companheiros, ...adv, 'goleiro_a', 'goleiro_b', 'estadio', 'bola']), Som.carregarSons().catch(() => {})])
+      .then(([m]) => { if (vivo) { modelos.current = m; setPronto(true); } });
+    return () => { vivo = false; Som.torcida(false); };
   }, []);
 
   useEffect(() => { if (cena.current) cena.current.modoCamera = camera; }, [camera]);
@@ -82,6 +84,7 @@ export default function Partida({ mapa, meuId, meuNivel, trofeus, aoTerminar, sa
         while (acumulado >= 1 / 60) {
           passo(e, 1 / 60, en); acumulado -= 1 / 60;
           en.chutar = false; en.usarSuper = false; en.mirar = null;
+          for (const ev of e.eventos) somDoEvento(ev, e);
           for (const ev of e.eventos) {
             if (ev.startsWith('gol:')) { msgTxt.current = ev === 'gol:0' ? 'GOOOOL!' : 'Gol deles...'; msgT.current = 2.6; }
             else if (ev === 'prorrogacao') { msgTxt.current = 'PRORROGAÇÃO! Gol de ouro'; msgT.current = 2.5; }
@@ -90,6 +93,8 @@ export default function Partida({ mapa, meuId, meuNivel, trofeus, aoTerminar, sa
           }
         }
         msgT.current = Math.max(0, msgT.current - dt);
+        const perto = Math.min(1, Math.abs(e.bola.x) / (e.comp / 2));
+        Som.torcida(e.fase !== 'fim', e.fase === 'gol' ? 0.9 : 0.3 + 0.35 * perto * perto);
         c.atualizar(e, dt);
         hudT -= dt;
         if (hudT <= 0) {
@@ -97,12 +102,31 @@ export default function Partida({ mapa, meuId, meuNivel, trofeus, aoTerminar, sa
           const eu = e.jogadores.find(j => j.humano)!;
           setHud({ placar: [e.placar[0], e.placar[1]], tempo: e.tempo, superCarga: eu.superCarga, fase: e.fase, prorrog: e.prorrogacao, msg: msgT.current > 0 ? msgTxt.current : '', vencedor: e.vencedor });
         }
+        if (faseAnt.current === 'saida' && e.fase === 'jogo') Som.tocar('apito', 0.6);
+        faseAnt.current = e.fase;
         if (e.fase === 'fim' && !terminou.current) { terminou.current = true; }
       },
       redimensionar: (nw: number, nh: number) => c.redimensionar(nw, nh),
       destruir: () => c.destruir(),
     };
   };
+
+  const faseAnt = useRef<string>('');
+  const somDoEvento = (ev: string, e: Estado) => {
+    if (ev === 'chute') Som.tocar('chute', 0.9, 0.9 + Math.random() * 0.2);
+    else if (ev === 'carrinho') Som.tocar('carrinho', 0.7);
+    else if (ev === 'desarme') Som.tocar('chute', 0.6, 0.7);
+    else if (ev === 'impacto') Som.tocar('chute_forte', 0.9);
+    else if (ev === 'super:congelar') Som.tocar('congelar', 0.9);
+    else if (ev.startsWith('super:')) { Som.tocar('super', 0.9); if (ev === 'super:canhao' || ev === 'super:chute_ouro') Som.tocar('chute_forte', 1); }
+    else if (ev.startsWith('gol:')) { Som.tocar('gol', 1); Som.tocar('apito', 0.6); }
+    else if (ev === 'trave') { Som.tocar('trave', 0.9); Som.tocar('uuh', 0.7); }
+    else if (ev === 'defendeu') Som.tocar('uuh', 0.8);
+    else if (ev === 'fim') Som.tocar('apito_final', 0.8);
+    else if (ev === 'prorrogacao') Som.tocar('apito', 0.8);
+    void e;
+  };
+  const [mudo, setMudoUI] = useState(Som.estaMudo());
 
   // layout dos botões (em pixels da tela)
   const tamChute = Math.min(H * 0.24, 110), tamSuper = tamChute * 0.78;
@@ -180,6 +204,9 @@ export default function Partida({ mapa, meuId, meuNivel, trofeus, aoTerminar, sa
         <View style={{ backgroundColor: COR.vermelho, paddingHorizontal: 14, paddingVertical: 6, borderTopRightRadius: 10, borderBottomRightRadius: 10 }}><Text style={{ color: '#fff', fontWeight: '900', fontSize: 22 }}>{hud.placar[1]}</Text></View>
       </View>
       <View style={{ position: 'absolute', top: 8, right: 10, flexDirection: 'row', gap: 6 }}>
+        <Pressable onPress={() => { const m = !mudo; Som.setMudo(m); setMudoUI(m); }} style={{ backgroundColor: '#0008', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }}>
+          <Text style={{ color: '#fff', fontWeight: '800' }}>{mudo ? '🔇' : '🔊'}</Text>
+        </Pressable>
         <Pressable onPress={() => setCamera(camera === 'tv' ? 'perto' : 'tv')} style={{ backgroundColor: '#0008', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }}>
           <Text style={{ color: '#fff', fontWeight: '800' }}>🎥 {camera === 'tv' ? 'TV' : 'Perto'}</Text>
         </Pressable>

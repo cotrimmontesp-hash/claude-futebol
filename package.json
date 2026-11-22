@@ -24,7 +24,8 @@
     "react-native-web": "^0.21.0",
     "three": "^0.170.0",
     "@vercel/blob": "^0.27.3",
-    "expo-file-system": "~19.0.17"
+    "expo-file-system": "~19.0.17",
+    "expo-audio": "~1.0.0"
   },
   "devDependencies": {
     "@types/react": "~19.1.10",

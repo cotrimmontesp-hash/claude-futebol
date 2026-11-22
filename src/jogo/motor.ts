@@ -1,8 +1,8 @@
 // Motor do jogo: regras, física da bola, supers e inteligência dos bots. Sem gráficos aqui.
-import { Personagem, porId, bonusNivel } from '../dados/personagens';
+import { Personagem, porId, bonusNivel, GOLEIROS } from '../dados/personagens';
 import { Mapa, DIM, CELULA, grade, TEMAS, Peca } from '../dados/mapas';
 
-export type Anim = 'parado' | 'correr' | 'chutar' | 'comemorar';
+export type Anim = 'parado' | 'correr' | 'chutar' | 'comemorar' | 'defender';
 
 export interface Jogador {
   idx: number;
@@ -23,6 +23,9 @@ export interface Jogador {
   humano: boolean;
   escondido: boolean;
   homeX: number; homeZ: number;
+  goleiro: boolean;
+  defesa: { t: number; lado: number } | null;
+  segura: number; // tempo segurando a bola (goleiro)
 }
 
 export interface Bola {
@@ -69,18 +72,20 @@ export function criarPartida(mapa: Mapa, meuTime: { id: string; nivel: number }[
   const { comp, larg } = DIM[mapa.tamanho];
   const tema = TEMAS[mapa.tema];
   const jogadores: Jogador[] = [];
-  const add = (time: 0 | 1, id: string, nivel: number, humano: boolean, hx: number, hz: number) => {
-    const p = porId(id); const b = bonusNivel(nivel);
+  const add = (time: 0 | 1, id: string, nivel: number, humano: boolean, hx: number, hz: number, goleiro = false) => {
+    const p = goleiro ? GOLEIROS[time] : porId(id); const b = bonusNivel(nivel);
     jogadores.push({
       idx: jogadores.length, time, p, x: hx, z: hz, y: 0, vx: 0, vz: 0, vy: 0, dir: time === 0 ? 0 : Math.PI,
       vel: p.velocidade * b, chute: p.chute * (1 + (b - 1) * 0.5), superCarga: 0,
       atordoado: 0, congelado: 0, escudo: 0, turbo: 0, fogo: 0, carrinho: 0, recargaChute: 0, dash: null, pulo: null,
-      anim: 'parado', animT: 0, humano, escondido: false, homeX: hx, homeZ: hz,
+      anim: 'parado', animT: 0, humano, escondido: false, homeX: hx, homeZ: hz, goleiro, defesa: null, segura: 0,
     });
   };
   const posicoes = (s: number) => [[-comp * 0.18 * s, 0], [-comp * 0.32 * s, -larg * 0.25], [-comp * 0.32 * s, larg * 0.25]];
   meuTime.forEach((m, i) => { const [x, z] = posicoes(1)[i]; add(0, m.id, m.nivel, i === 0, x, z); });
   adversarios.forEach((m, i) => { const [x, z] = posicoes(-1)[i]; add(1, m.id, m.nivel, false, x, z); });
+  add(0, 'goleiro_a', meuTime[0]?.nivel ?? 1, false, -comp / 2 + 1.2, 0, true);
+  add(1, 'goleiro_b', adversarios[0]?.nivel ?? 1, false, comp / 2 - 1.2, 0, true);
 
   const { cols, lins } = grade(mapa.tamanho);
   const muros: Muro[] = []; const zonas: Estado['zonas'] = [];
@@ -103,11 +108,11 @@ export function criarPartida(mapa: Mapa, meuTime: { id: string; nivel: number }[
 function reposicionar(e: Estado, quemSai: 0 | 1) {
   for (const j of e.jogadores) {
     j.x = j.homeX; j.z = j.homeZ; j.vx = j.vz = 0; j.y = 0; j.vy = 0; j.dash = null; j.pulo = null;
-    j.atordoado = j.congelado = 0; j.carrinho = 0; j.dir = j.time === 0 ? 0 : Math.PI; j.anim = 'parado';
+    j.atordoado = j.congelado = 0; j.carrinho = 0; j.dir = j.time === 0 ? 0 : Math.PI; j.anim = 'parado'; j.defesa = null; j.segura = 0;
   }
   const b = e.bola; b.x = 0; b.z = 0; b.y = RAIO_BOLA; b.vx = b.vy = b.vz = 0; b.dono = -1; b.especial = '';
   // quem sofreu o gol sai com a bola: o atacante dele fica mais perto
-  const saidor = e.jogadores.find(j => j.time === quemSai);
+  const saidor = e.jogadores.find(j => j.time === quemSai && !j.goleiro);
   if (saidor) { saidor.x = quemSai === 0 ? -1.2 : 1.2; saidor.z = 0; }
   e.muros = e.muros.filter(m => !m.temp);
   e.fase = 'saida'; e.faseT = 1.6;
@@ -148,13 +153,14 @@ function carrinho(e: Estado, j: Jogador, ax: number, az: number) {
 
 function derrubar(e: Estado, alvo: Jogador, t: number) {
   if (alvo.escudo > 0) return false;
+  if (alvo.goleiro && e.bola.dono === alvo.idx) return false;
   alvo.atordoado = Math.max(alvo.atordoado, t);
   if (e.bola.dono === alvo.idx) { e.bola.dono = -1; e.bola.semDono = 0.15; e.bola.vx = (Math.random() - 0.5) * 6; e.bola.vz = (Math.random() - 0.5) * 6; e.bola.vy = 3; }
   return true;
 }
 
 function usarSuper(e: Estado, j: Jogador, ax: number, az: number) {
-  if (j.superCarga < 1) return;
+  if (j.superCarga < 1 || j.goleiro) return;
   j.superCarga = 0;
   const b = e.bola; const n = Math.hypot(ax, az) || 1; const dx = ax / n, dz = az / n;
   const inimigos = e.jogadores.filter(o => o.time !== j.time);
@@ -219,12 +225,43 @@ function usarSuper(e: Estado, j: Jogador, ax: number, az: number) {
 }
 
 // ---------- IA ----------
+function iaGoleiro(e: Estado, j: Jogador): Entrada {
+  const b = e.bola;
+  const ent: Entrada = { mx: 0, mz: 0, chutar: false, mirar: null, usarSuper: false };
+  const meuGol = -golDe(e, j.time); const sx = meuGol > 0 ? -1 : 1; // para dentro do campo
+  const ir = (tx: number, tz: number, devagar = 1) => { const dx = tx - j.x, dz = tz - j.z; const d = Math.hypot(dx, dz); if (d > 0.25) { const k = Math.min(1, d / 1.5) * devagar; ent.mx = (dx / d) * k; ent.mz = (dz / d) * k; } };
+  if (b.dono === j.idx) {
+    // segura um pouco e lança para o companheiro mais à frente
+    j.segura += 1 / 60;
+    ir(meuGol + sx * 4, 0, 0.5);
+    if (j.segura > 0.9) {
+      const comp = e.jogadores.filter(o => o.time === j.time && !o.goleiro && !o.humano || (o.time === j.time && o.humano));
+      const alvo = comp.sort((a, c) => (c.x - a.x) * sx - 0)[0];
+      ent.chutar = true; ent.mirar = alvo ? { x: alvo.x - j.x + sx * 3, z: alvo.z - j.z } : { x: sx * 20, z: 0 };
+      j.segura = 0;
+    }
+    return ent;
+  }
+  j.segura = 0;
+  const naArea = Math.abs(b.x - meuGol) < 9 && Math.abs(b.z) < e.golL / 2 + 6;
+  if (b.dono < 0 && naArea && Math.hypot(b.vx, b.vz) < 9) { ir(b.x, b.z); return ent; }   // sai para pegar bola solta
+  if (b.dono >= 0 && e.jogadores[b.dono].time !== j.time && naArea && Math.hypot(b.x - j.x, b.z - j.z) < 3.5) {
+    ent.chutar = Math.random() < 0.08; ent.mirar = { x: b.x - j.x, z: b.z - j.z }; ir(b.x, b.z); return ent; // abafa
+  }
+  // posição: na linha entre a bola e o centro do gol
+  const lim = e.golL / 2 - 0.4;
+  const tz = Math.max(-lim, Math.min(lim, b.z * 0.55));
+  ir(meuGol + sx * 1.3, tz, 0.9);
+  return ent;
+}
+
 function ia(e: Estado, j: Jogador): Entrada {
+  if (j.goleiro) return iaGoleiro(e, j);
   const b = e.bola;
   const ent: Entrada = { mx: 0, mz: 0, chutar: false, mirar: null, usarSuper: false };
   const gx = golDe(e, j.time); const meuGol = -gx;
   const temBola = b.dono === j.idx;
-  const companheiros = e.jogadores.filter(o => o.time === j.time);
+  const companheiros = e.jogadores.filter(o => o.time === j.time && !o.goleiro);
   const inimigos = e.jogadores.filter(o => o.time !== j.time);
   const nossoTimeTem = b.dono >= 0 && e.jogadores[b.dono].time === j.time;
   const delesTem = b.dono >= 0 && e.jogadores[b.dono].time !== j.time;
@@ -302,6 +339,24 @@ export function passo(e: Estado, dt: number, entradaHumano: Entrada) {
     j.superCarga = clamp(j.superCarga + dt * 0.012 * j.p.superCarga, 0, 1); // carrega devagar sozinho
 
     const ent = j.humano ? entradaHumano : ia(e, j);
+    if (j.goleiro && !j.defesa && b.dono < 0 && j.atordoado <= 0 && j.congelado <= 0) {
+      const meuGol = -golDe(e, j.time);
+      const vemPraCa = (meuGol - b.x) * b.vx > 0 && Math.abs(b.vx) > 6;
+      if (vemPraCa) {
+        const t = (meuGol - b.x) / b.vx;
+        const zc = b.z + b.vz * t;
+        if (t < 0.9 && t > 0 && Math.abs(zc) < e.golL / 2 + 1.2 && Math.abs(zc - j.z) > 0.7) {
+          const erro = Math.random() < 0.3 ? (Math.random() - 0.5) * 3 : 0;   // às vezes pula errado
+          const dz = zc + erro - j.z; const dur = 0.45;
+          j.dash = { vx: 0, vz: Math.sign(dz) * Math.min(11, Math.abs(dz) / dur), t: dur };
+          const rz = Math.cos(j.dir); // vetor direita do goleiro (-sin d, cos d) -> componente z
+          j.defesa = { t: 1.1, lado: Math.sign(dz * rz) || 1 };
+          j.anim = 'defender'; j.animT = 0;
+          e.eventos.push('defesa');
+        }
+      }
+    }
+    if (j.defesa) { j.defesa.t -= dt; if (j.defesa.t <= 0) j.defesa = null; }
     const livre = j.atordoado <= 0 && j.congelado <= 0 && !j.pulo;
 
     // pulo
@@ -383,6 +438,12 @@ export function passo(e: Estado, dt: number, entradaHumano: Entrada) {
     if (j.anim === 'chutar') { j.animT += dt; if (j.animT > 0.5) j.anim = v > 0.6 ? 'correr' : 'parado'; }
     else j.anim = v > 0.6 ? 'correr' : 'parado';
     if (j.pulo) j.anim = 'chutar';
+    if (j.defesa) j.anim = 'defender';
+    if (j.goleiro) { // goleiro fica perto do gol
+      const meuGol = -golDe(e, j.time);
+      j.x = clamp(j.x, Math.min(meuGol, meuGol - Math.sign(meuGol) * 10), Math.max(meuGol, meuGol - Math.sign(meuGol) * 10));
+      j.z = clamp(j.z, -e.golL / 2 - 6, e.golL / 2 + 6);
+    }
   }
 
   // separa jogadores que se encostam
@@ -468,11 +529,14 @@ function bolaFisica(e: Estado, dt: number) {
       const velB = Math.hypot(b.vx, b.vz);
       for (const j of e.jogadores) {
         if (j.atordoado > 0 || j.congelado > 0 || j.pulo) continue;
-        if (dist(j.x, j.z, b.x, b.z) < RAIO_JOG + RAIO_BOLA + 0.25 && b.y < 1.6) {
+        const alcance = j.goleiro ? (j.defesa ? 1.5 : 1.0) : RAIO_JOG + RAIO_BOLA + 0.25;
+        if (dist(j.x, j.z, b.x, b.z) < alcance && b.y < (j.goleiro ? 2.6 : 1.6)) {
+          if (j.goleiro && b.especial && Math.random() < 0.6) { derrubar(e, j, 0.8); b.vx *= 0.8; continue; }
           if (b.especial && b.ultimo >= 0 && e.jogadores[b.ultimo].time !== j.time) {
             if (derrubar(e, j, 1.1)) continue;
           }
-          if (velB > 26 && j.idx !== b.ultimo && Math.random() < 0.5) continue; // bola muito forte passa
+          if (!j.goleiro && velB > 26 && j.idx !== b.ultimo && Math.random() < 0.5) continue; // bola muito forte passa
+          if (j.goleiro && j.idx !== b.ultimo && velB > 8) { e.eventos.push('defendeu'); b.vx = b.vz = 0; }
           const antes = b.ultimo >= 0 ? e.jogadores[b.ultimo].time : j.time;
           b.dono = j.idx; b.ultimo = j.idx; b.especial = '';
           if (j.time !== antes) carregar(j, 0.1);

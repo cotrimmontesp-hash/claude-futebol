@@ -76,3 +76,11 @@ export const porId = (id: string) => PERSONAGENS.find(p => p.id === id) ?? PERSO
 export const bonusNivel = (nivel: number) => 1 + (nivel - 1) * 0.04;
 export const custoNivel = (nivel: number) => [0, 20, 35, 75, 140, 290, 480, 800, 1250, 1875, 2800][nivel] ?? 9999;
 export const NIVEL_MAX = 11;
+
+// goleiros (controlados pelo computador nos dois times)
+export const GOLEIROS: Personagem[] = [
+  { id: 'goleiro_a', nome: 'Goleiro', raridade: 'inicial', descricao: 'Goleiro do seu time.', velocidade: 5.6, chute: 24, desarme: 2.0,
+    superTipo: 'canhao', superNome: '', superDescricao: '', superCarga: 0 },
+  { id: 'goleiro_b', nome: 'Goleiro', raridade: 'inicial', descricao: 'Goleiro adversário.', velocidade: 5.6, chute: 24, desarme: 2.0,
+    superTipo: 'canhao', superNome: '', superDescricao: '', superCarga: 0 },
+];

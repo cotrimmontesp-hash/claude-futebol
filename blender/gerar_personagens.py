@@ -19,9 +19,12 @@ CHARS = [
  ('sombra', (0.12,0.08,0.20),(0.12,0.08,0.20),(0.12,0.08,0.20),(0.80,0.62,0.50),(0.02,0.02,0.02),'longo',  (0.5,0.2,0.9),   ''),
  ('rei',    (1.0,1.0,1.0),   (1.0,1.0,1.0),   (1.0,1.0,1.0),   (0.55,0.37,0.25),(0.05,0.04,0.03),'curto',  (1.0,0.8,0.1),   'coroa'),
  ('fenix',  (1.0,0.45,0.05), (0.70,0.05,0.05),(1.0,0.45,0.05), (0.88,0.68,0.55),(0.95,0.55,0.10),'moicano',(1.0,0.3,0.0),   'barba'),
+ ('goleiro_a',(1.0,0.55,0.05),(0.1,0.1,0.1),(1.0,0.55,0.05),(0.8,0.58,0.42),(0.06,0.04,0.03),'curto',(0.1,0.1,0.1),'goleiro'),
+ ('goleiro_b',(0.55,0.95,0.15),(0.1,0.1,0.1),(0.55,0.95,0.15),(0.6,0.42,0.3),(0.04,0.03,0.02),'careca',(0.9,0.9,0.9),'goleiro'),
 ]
+GOLEIRO = False
 
-NUMEROS = {'chico':10,'bia':7,'tonhao':4,'lia':2,'pipoca':11,'gelo':5,'tornado':8,'ima':9,'sombra':17,'rei':23,'fenix':99}
+NUMEROS = {'chico':10,'bia':7,'tonhao':4,'lia':2,'pipoca':11,'gelo':5,'tornado':8,'ima':9,'sombra':17,'rei':23,'fenix':99,'goleiro_a':1,'goleiro_b':12}
 
 def numero(txt, loc, tam, rotz, m):
     bpy.ops.object.text_add(location=loc, rotation=(math.pi/2, 0, rotz))
@@ -74,6 +77,12 @@ def detalhes(cid, camisa, calcao, mB):
     pele = None
     for f in bpy.data.materials:
         if f.name.startswith('pele'): pele = f
+    if cid.startswith('goleiro'):
+        luva = mat('luva', (0.95,0.95,0.95), 0.6)
+        for s2 in (1, -1):
+            ps.append(tubo((s2*0.272,0.006,1.30),(s2*0.405,-0.018,0.975),0.06,0.042,mPano))
+            ps.append(tubo((s2*0.40,-0.018,0.99),(s2*0.415,-0.02,0.935),0.045,0.047,luva))
+        pele = luva
     for s2 in (1, -1): ps += mao(s2, pele)
     claro = sum(camisa) / 3 > 0.6
     mN = mat('numero', (0.05,0.05,0.08) if claro else (1,1,1), 0.5)
@@ -362,6 +371,11 @@ def animacoes(arm):
                          (8,{'braco.L':(0,0,-150),'braco.R':(0,0,150),'coluna':(-10,0,0)}),
                          (16,{'braco.L':(0,0,-160),'braco.R':(0,0,160),'coluna':(-14,0,0)}),
                          (24,{'braco.L':(0,0,-150),'braco.R':(0,0,150),'coluna':(-10,0,0)})])
+    if GOLEIRO:
+        anim(arm, 'defender', [(1,{}),
+                         (5,{'quadril':(0,0,55),'braco.L':(0,0,-150),'braco.R':(0,0,150),'coxa.L':(0,0,-25),'coxa.R':(0,0,20)}),
+                         (11,{'quadril':(0,0,80),'braco.L':(0,0,-170),'braco.R':(0,0,170),'coxa.L':(0,0,-30),'coxa.R':(0,0,25)}),
+                         (24,{'quadril':(0,0,85),'braco.L':(0,0,-165),'braco.R':(0,0,165),'coxa.L':(0,0,-20),'coxa.R':(0,0,15)})])
 
 # ---------- cena / render ----------
 def motor():
@@ -392,6 +406,8 @@ def camera_retrato(res=640):
     sc.render.resolution_x = res; sc.render.resolution_y = res
 
 def fazer(cid, camisa, calcao, meiao, pele, cab, estilo, chut, extra):
+    global GOLEIRO
+    GOLEIRO = (extra == 'goleiro')
     limpar()
     mC = mat('camisa', camisa, 0.8); mS = mat('calcao', calcao, 0.7); mM = mat('meiao', meiao, 0.9)
     mP = mat('pele', pele, 0.5, sss=0.15); mB = mat('chuteira', chut, 0.35); mH = mat('cabelo', cab, 0.85)

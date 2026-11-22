@@ -14,8 +14,8 @@ export default function Palco3D({ iniciar }: PalcoProps) {
     const w = host.clientWidth || window.innerWidth, h = host.clientHeight || window.innerHeight;
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
     const fraco = /Android|iPhone|iPad/i.test(navigator.userAgent);
-    const ctrl = iniciar(renderer, w, h, !fraco);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, fraco ? 1.25 : 2));
+    const ctrl = iniciar(renderer, w, h, true);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, fraco ? 1.5 : 2));
     renderer.setSize(w, h, false);
     let raf = 0, ultimo = performance.now();
     const loop = (t: number) => { const dt = Math.min(0.05, (t - ultimo) / 1000); ultimo = t; ctrl.quadro(dt); raf = requestAnimationFrame(loop); };

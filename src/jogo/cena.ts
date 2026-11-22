@@ -9,6 +9,7 @@ const COR_TIME = [0x1e88ff, 0xff3b3b];
 
 interface Boneco {
   raiz: THREE.Group;
+  corpo: THREE.Object3D | null;
   mixer: THREE.AnimationMixer | null;
   acoes: Partial<Record<Anim, THREE.AnimationAction>>;
   atual: Anim | '';
@@ -40,6 +41,9 @@ export class Cena {
   private cacheEfeito = new Map<string, THREE.Object3D>();
   private murosChave = '';
   mira: { x: number; z: number; super: boolean } | null = null;
+  bandeiras: THREE.Mesh[] = [];
+  cabecas: THREE.InstancedMesh | null = null;
+  sombraAlta = !(typeof navigator !== 'undefined' && /Android|iPhone|iPad/i.test((navigator as any).userAgent || ''));
   private seta!: THREE.Mesh;
 
   private modeloEstadio?: THREE.Object3D;
@@ -81,14 +85,24 @@ export class Cena {
     const tema = TEMAS[e.mapa.tema];
     const noite = e.mapa.noite;
     const s = this.scene;
-    s.background = new THREE.Color(noite ? (e.mapa.tema === 'lua' ? 0x02020a : 0x0a1024) : tema.ceu);
-    s.fog = new THREE.Fog(s.background as THREE.Color, 90, 260);
+    const corCeu = new THREE.Color(noite ? (e.mapa.tema === 'lua' ? 0x02020a : 0x0a1024) : tema.ceu);
+    s.background = corCeu;
+    s.fog = new THREE.Fog(corCeu.clone().lerp(new THREE.Color(0xffffff), noite ? 0.05 : 0.35), 110, 320);
+    {
+      const g = new THREE.SphereGeometry(400, 32, 16); const pos = g.getAttribute('position'); const cores = new Float32Array(pos.count * 3);
+      const topo = corCeu.clone().multiplyScalar(noite ? 0.6 : 0.75), horiz = corCeu.clone().lerp(new THREE.Color(noite ? 0x223355 : 0xffffff), noite ? 0.3 : 0.55);
+      for (let i = 0; i < pos.count; i++) { const k = Math.max(0, pos.getY(i) / 400); const c = horiz.clone().lerp(topo, Math.pow(k, 0.6)); cores.set([c.r, c.g, c.b], i * 3); }
+      g.setAttribute('color', new THREE.BufferAttribute(cores, 3));
+      const ceu = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false }));
+      s.add(ceu);
+    }
 
-    s.add(new THREE.HemisphereLight(noite ? 0x6677aa : 0xdfefff, 0x335522, noite ? 0.55 : 1.0));
+    s.add(new THREE.HemisphereLight(noite ? 0x6677aa : 0xdfefff, 0x2a4a22, noite ? 0.6 : 1.1));
+    const reforco = new THREE.DirectionalLight(noite ? 0x8899cc : 0xcfe3ff, noite ? 0.4 : 0.7); reforco.position.set(30, 25, -30); s.add(reforco);
     const sol = new THREE.DirectionalLight(noite ? 0xdde6ff : 0xfff2dd, noite ? 1.6 : 2.4);
     sol.position.set(-30, 50, 25);
     if (this.sombras) {
-      sol.castShadow = true; sol.shadow.mapSize.set(2048, 2048);
+      sol.castShadow = true; sol.shadow.mapSize.set(this.sombraAlta ? 2048 : 1024, this.sombraAlta ? 2048 : 1024); sol.shadow.radius = 3;
       const c = sol.shadow.camera as THREE.OrthographicCamera;
       c.left = -e.comp / 2 - 6; c.right = e.comp / 2 + 6; c.top = e.larg / 2 + 6; c.bottom = -e.larg / 2 - 6; c.near = 1; c.far = 140;
       sol.shadow.bias = -0.0005;
@@ -106,15 +120,18 @@ export class Cena {
 
     // gramado com faixas
     const faixas = 12; const fw = (e.comp + 8) / faixas;
-    const m1 = new THREE.MeshStandardMaterial({ color: tema.grama1, roughness: 0.95 });
-    const m2 = new THREE.MeshStandardMaterial({ color: tema.grama2, roughness: 0.95 });
+    const tex = texturaGrama(e.mapa.tema === 'grama' ? 1 : e.mapa.tema === 'rua' ? 0.5 : 0.35);
+    tex.repeat.set(fw / 4, (e.larg + 8) / 4);
+    tex.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy?.() ?? 1);
+    const m1 = new THREE.MeshStandardMaterial({ color: tema.grama1, roughness: 0.92, map: tex });
+    const m2 = new THREE.MeshStandardMaterial({ color: tema.grama2, roughness: 0.92, map: tex });
     for (let i = 0; i < faixas; i++) {
       const p = new THREE.Mesh(new THREE.PlaneGeometry(fw, e.larg + 8), i % 2 ? m1 : m2);
       p.rotation.x = -Math.PI / 2; p.position.set(-e.comp / 2 - 4 + fw * (i + 0.5), 0, 0); p.receiveShadow = this.sombras; s.add(p);
     }
 
     // linhas
-    const ml = new THREE.MeshBasicMaterial({ color: tema.linhas });
+    const ml = new THREE.MeshBasicMaterial({ color: tema.linhas, transparent: true, opacity: 0.92 });
     const linha = (x: number, z: number, w: number, d: number) => {
       const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), ml); m.rotation.x = -Math.PI / 2; m.position.set(x, 0.01, z); s.add(m);
     };
@@ -129,6 +146,16 @@ export class Cena {
       linha(sx * (C - pw), 0, t, ph); linha(sx * (C - pw / 2), -ph / 2, pw, t); linha(sx * (C - pw / 2), ph / 2, pw, t);
       const pen = new THREE.Mesh(new THREE.CircleGeometry(0.2, 12), ml); pen.rotation.x = -Math.PI / 2; pen.position.set(sx * (C - aw * 0.7), 0.011, 0); s.add(pen);
       this.montarGol(sx, e);
+    }
+
+    for (const [bx, bz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+      const haste = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.5, 8), new THREE.MeshStandardMaterial({ color: 0xffffff }));
+      haste.position.set(bx * C, 0.75, bz * L); haste.castShadow = this.sombras; s.add(haste);
+      const forma = new THREE.Shape(); forma.moveTo(0, 0); forma.lineTo(0.5, -0.18); forma.lineTo(0, -0.36);
+      const band = new THREE.Mesh(new THREE.ShapeGeometry(forma), new THREE.MeshStandardMaterial({ color: 0xffd60a, side: THREE.DoubleSide }));
+      band.position.set(bx * C, 1.5, bz * L); band.rotation.y = bx > 0 ? Math.PI : 0; s.add(band); this.bandeiras.push(band);
+      const arco = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.0, 16, 1, bx > 0 ? (bz > 0 ? Math.PI : Math.PI / 2) : (bz > 0 ? -Math.PI / 2 : 0), Math.PI / 2), ml);
+      arco.rotation.x = -Math.PI / 2; arco.position.set(bx * C, 0.012, bz * L); s.add(arco);
     }
 
     // arquibancadas + torcida
@@ -228,14 +255,19 @@ export class Cena {
       }
     }
     if (posicoes.length) {
-      const geo = new THREE.BoxGeometry(0.42, 0.72, 0.32);
-      const inst = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ roughness: 0.8 }), posicoes.length);
+      const geo = new THREE.CapsuleGeometry(0.2, 0.32, 2, 8);
+      const inst = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ roughness: 0.85 }), posicoes.length);
+      const cab = new THREE.InstancedMesh(new THREE.SphereGeometry(0.13, 10, 8), new THREE.MeshStandardMaterial({ roughness: 0.7 }), posicoes.length);
+      const peles = [0xf1c27d, 0xe0ac69, 0xc68642, 0x8d5524, 0x5c3a1e, 0xffdbac];
+      const desloc = new THREE.Matrix4().makeTranslation(0, 0.42, 0);
       for (let i = 0; i < posicoes.length; i++) {
         inst.setMatrixAt(i, posicoes[i]); inst.setColorAt(i, cores[i]);
+        cab.setMatrixAt(i, new THREE.Matrix4().multiplyMatrices(posicoes[i], desloc)); cab.setColorAt(i, new THREE.Color(peles[(Math.random() * peles.length) | 0]));
         this.torcidaBase.push({ y: new THREE.Vector3().setFromMatrixPosition(posicoes[i]).y, fase: Math.random() * 6.28 });
       }
       inst.instanceMatrix.needsUpdate = true; if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
-      this.torcida = inst; raiz.add(inst);
+      if (cab.instanceColor) cab.instanceColor.needsUpdate = true;
+      this.torcida = inst; this.cabecas = cab; raiz.add(inst); raiz.add(cab);
     }
     if (!usaModelo) {
       for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
@@ -252,7 +284,7 @@ export class Cena {
     for (const j of e.jogadores) {
       const gltf = modelos[j.p.id];
       const raiz = new THREE.Group();
-      let mixer: THREE.AnimationMixer | null = null; const acoes: Boneco['acoes'] = {};
+      let mixer: THREE.AnimationMixer | null = null; const acoes: Boneco['acoes'] = {}; let corpoRef: THREE.Object3D | null = null;
       const materiais: THREE.Material[] = [];
       if (gltf) {
         const corpo = SkeletonUtils.clone(gltf.scene) as THREE.Group;
@@ -260,12 +292,12 @@ export class Cena {
           const m = o as THREE.Mesh;
           if (m.isMesh) { m.castShadow = this.sombras; m.frustumCulled = false; const mm = Array.isArray(m.material) ? m.material : [m.material]; materiais.push(...mm); }
         });
-        corpo.scale.setScalar(1.15); raiz.add(corpo);
+        corpo.scale.setScalar(1.15); raiz.add(corpo); corpoRef = corpo;
         mixer = new THREE.AnimationMixer(corpo);
         for (const clip of gltf.animations) {
           const nome = clip.name as Anim;
           const a = mixer.clipAction(clip);
-          if (nome === 'chutar') { a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true; }
+          if (nome === 'chutar' || nome === 'defender') { a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true; }
           acoes[nome] = a;
         }
       } else {
@@ -274,6 +306,8 @@ export class Cena {
       }
       const anel = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.72, 32), new THREE.MeshBasicMaterial({ color: COR_TIME[j.time], transparent: true, opacity: 0.85 }));
       anel.rotation.x = -Math.PI / 2; anel.position.y = 0.03; raiz.add(anel);
+      const blob = new THREE.Mesh(new THREE.CircleGeometry(0.5, 20), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.32, depthWrite: false }));
+      blob.rotation.x = -Math.PI / 2; blob.position.y = 0.02; raiz.add(blob);
       const gelo = new THREE.Mesh(new THREE.BoxGeometry(1.1, 2.1, 1.1), new THREE.MeshStandardMaterial({ color: 0xaee9ff, transparent: true, opacity: 0.55, roughness: 0.05, metalness: 0.2 }));
       gelo.position.y = 1.05; gelo.visible = false; raiz.add(gelo);
       const escudo = new THREE.Mesh(new THREE.SphereGeometry(1.2, 24, 16), new THREE.MeshBasicMaterial({ color: 0x7df9ff, transparent: true, opacity: 0.25 }));
@@ -287,7 +321,7 @@ export class Cena {
         (anel.material as THREE.MeshBasicMaterial).color.set(0xffd60a);
       }
       this.scene.add(raiz);
-      this.bonecos.push({ raiz, mixer, acoes, atual: '', anel, gelo, escudo, tontura, seta, materiais });
+      this.bonecos.push({ raiz, corpo: corpoRef, mixer, acoes, atual: '', anel, gelo, escudo, tontura, seta, materiais });
     }
   }
 
@@ -322,7 +356,8 @@ export class Cena {
     const humano = e.jogadores.find(j => j.humano);
     e.jogadores.forEach((j, i) => {
       const b = this.bonecos[i];
-      b.raiz.position.set(j.x, j.y, j.z);
+      b.raiz.position.set(j.x, j.y - (j.defesa ? Math.min(0.55, (1.1 - j.defesa.t) * 1.6) : 0), j.z);
+      if (b.corpo) b.corpo.scale.x = 1.15 * (j.defesa ? j.defesa.lado : 1);
       b.raiz.rotation.y = Math.PI / 2 - j.dir;
       const anim: Anim = j.anim;
       if (b.mixer && anim !== b.atual) {
@@ -375,10 +410,13 @@ export class Cena {
         this.torcida.getMatrixAt(i, m); m.decompose(p, q, sc);
         const tb = this.torcidaBase[i]; if (!tb) continue; p.y = tb.y + Math.max(0, Math.sin(this.tempo * 9 + tb.fase)) * 0.35 * festa;
         m.compose(p, q, sc); this.torcida.setMatrixAt(i, m);
+        if (this.cabecas) { p.y += 0.42; m.compose(p, q, sc); this.cabecas.setMatrixAt(i, m); }
       }
       this.torcida.instanceMatrix.needsUpdate = true;
+      if (this.cabecas) this.cabecas.instanceMatrix.needsUpdate = true;
     }
 
+    for (const [i, bd] of this.bandeiras.entries()) bd.rotation.y = (i % 2 ? Math.PI : 0) + Math.sin(this.tempo * 3 + i) * 0.25;
     if (this.chuva) {
       const pos = this.chuva.geometry.getAttribute('position') as THREE.BufferAttribute;
       for (let i = 0; i < pos.count; i++) { let y = pos.getY(i) - dt * 22; if (y < 0) y = 30; pos.setY(i, y); }
@@ -460,4 +498,25 @@ export class Cena {
     this.scene.traverse(o => { const m = o as THREE.Mesh; if (m.geometry) m.geometry.dispose(); });
     this.renderer.dispose();
   }
+}
+
+// textura de grama feita no código (funciona no site e no celular, sem arquivo de imagem)
+function texturaGrama(forca: number) {
+  const N = 256; const dados = new Uint8Array(N * N * 4);
+  let semente = 1234; const rnd = () => { semente = (semente * 16807) % 2147483647; return semente / 2147483647; };
+  const ruido = new Float32Array(N * N);
+  for (let i = 0; i < N * N; i++) ruido[i] = rnd();
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const i = y * N + x;
+    // folhinhas: riscos verticais curtos + manchas suaves
+    const fio = ruido[i] * 0.6 + ruido[((y + 1) % N) * N + x] * 0.25 + ruido[((y + 2) % N) * N + x] * 0.15;
+    const mancha = 0.5 + 0.5 * Math.sin(x * 0.07 + Math.sin(y * 0.05) * 2) * Math.sin(y * 0.06 + Math.cos(x * 0.04) * 2);
+    const v = 1 - forca * (0.28 * fio + 0.12 * mancha);
+    const c = Math.max(0, Math.min(255, Math.round(255 * v)));
+    dados[i * 4] = c * 0.96; dados[i * 4 + 1] = c; dados[i * 4 + 2] = c * 0.9; dados[i * 4 + 3] = 255;
+  }
+  const t = new THREE.DataTexture(dados, N, N, THREE.RGBAFormat);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter;
+  t.generateMipmaps = true; t.colorSpace = THREE.SRGBColorSpace; t.needsUpdate = true;
+  return t;
 }
