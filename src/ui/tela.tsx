@@ -31,11 +31,13 @@ export function TelaDeitada({ children }: { children: React.ReactNode }) {
   }, [toque]);
 
   const valor: Tela = rodado ? { width: H, height: W, rodado: true, larguraReal: W } : { width: W, height: H, rodado: false, larguraReal: W };
+  // sempre a mesma árvore (só muda o estilo), para o jogo não reiniciar quando a tela gira
+  const estilo: any = rodado
+    ? { position: 'absolute', width: H, height: W, left: (W - H) / 2, top: (H - W) / 2, transform: [{ rotate: '90deg' }], overflow: 'hidden' }
+    : { position: 'absolute', left: 0, top: 0, width: W, height: H, overflow: 'hidden' };
   return (
     <Ctx.Provider value={valor}>
-      {rodado ? (
-        <View style={{ position: 'absolute', width: H, height: W, left: (W - H) / 2, top: (H - W) / 2, transform: [{ rotate: '90deg' }], overflow: 'hidden' }}>{children}</View>
-      ) : <View style={{ flex: 1 }}>{children}</View>}
+      <View style={estilo}>{children}</View>
     </Ctx.Provider>
   );
 }

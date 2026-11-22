@@ -120,12 +120,17 @@ export default function Partida({ mapa, meuId, meuNivel, trofeus, aoTerminar, sa
   useEffect(() => {
     if (Platform.OS !== 'web' || !pronto) return;
     const el = camada.current as unknown as HTMLElement; if (!el) return;
+    // sem isso o navegador do celular "rouba" o arraste para rolar/zoom e o joystick para
+    el.style.touchAction = 'none'; (el.style as any).userSelect = 'none'; (el.style as any).webkitUserSelect = 'none';
+    document.body.style.touchAction = 'none'; document.body.style.overscrollBehavior = 'none';
+    const semRolar = (ev: TouchEvent) => ev.preventDefault();
+    el.addEventListener('touchstart', semRolar, { passive: false }); el.addEventListener('touchmove', semRolar, { passive: false });
     const pt = (ev: PointerEvent) => pontoNaTela(telaRef.current, ev.clientX, ev.clientY);
     const d = (ev: PointerEvent) => { ev.preventDefault(); el.setPointerCapture?.(ev.pointerId); const p = pt(ev); ctl.current.inicio(ev.pointerId, p.x, p.y); };
     const m = (ev: PointerEvent) => { const p = pt(ev); ctl.current.mover(ev.pointerId, p.x, p.y); };
     const u = (ev: PointerEvent) => ctl.current.fim(ev.pointerId);
     el.addEventListener('pointerdown', d); el.addEventListener('pointermove', m); el.addEventListener('pointerup', u); el.addEventListener('pointercancel', u);
-    return () => { el.removeEventListener('pointerdown', d); el.removeEventListener('pointermove', m); el.removeEventListener('pointerup', u); el.removeEventListener('pointercancel', u); };
+    return () => { el.removeEventListener('pointerdown', d); el.removeEventListener('pointermove', m); el.removeEventListener('pointerup', u); el.removeEventListener('pointercancel', u); el.removeEventListener('touchstart', semRolar); el.removeEventListener('touchmove', semRolar); };
   }, [pronto]);
 
   if (!pronto) return (
@@ -144,7 +149,7 @@ export default function Partida({ mapa, meuId, meuNivel, trofeus, aoTerminar, sa
     <View style={{ flex: 1, backgroundColor: '#000' }}>
       <Palco3D iniciar={iniciar} />
       {/* camada de toque */}
-      <View ref={camada} style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0 }} {...toques}>
+      <View ref={camada} collapsable={false} style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.01)' }} {...toques}>
         {/* joystick */}
         {j.ativo ? (
           <>
